@@ -1,0 +1,40 @@
+name: Auto Release on Tag
+
+on:
+  push:
+    tags:
+      - 'v*'
+
+permissions:
+  contents: write
+
+jobs:
+  build-and-release:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Build Arch Package in Docker
+        run: |
+          docker run --rm -v $PWD:/workspace -w /workspace archlinux:latest bash -c "
+            pacman-key --init && \
+            pacman-key --populate archlinux && \
+            pacman -Syu --noconfirm --needed base-devel && \
+            useradd -m builduser && \
+            chown -R builduser:builduser . && \
+            su builduser -c 'makepkg -d --noconfirm'
+          "
+
+      - name: Locate build package
+        id: locate_pkg
+        run: |
+          PKG_FILE=$(ls *.pkg.tar.zst)
+          echo "pkg_file=$PKG_FILE" >> $GITHUB_OUTPUT
+
+      - name: Create GitHub Release and Upload Asset
+        uses: softprops/action-gh-release@v2
+        with:
+          files: ${{ steps.locate_pkg.outputs.pkg_file }}
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
