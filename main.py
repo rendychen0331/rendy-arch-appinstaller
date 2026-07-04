@@ -1358,10 +1358,7 @@ class AppInstallerWindow(Adw.ApplicationWindow):
     def execute_install_command(self, cmd, source):
         # Configure ASKPASS for yay/AUR prompts
         script_dir = os.path.dirname(os.path.abspath(__file__))
-        if os.path.exists("/usr/bin/ksshaskpass"):
-            askpass_path = "/usr/bin/ksshaskpass"
-        else:
-            askpass_path = os.path.join(script_dir, "askpass.py")
+        askpass_path = os.path.join(script_dir, "askpass.py")
             
         env = os.environ.copy()
         env["SUDO_ASKPASS"] = askpass_path
