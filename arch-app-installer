@@ -1,0 +1,3 @@
+#!/bin/bash
+# Execute the system-wide Python script, passing all CLI arguments
+python /usr/share/arch-app-installer/main.py "$@"

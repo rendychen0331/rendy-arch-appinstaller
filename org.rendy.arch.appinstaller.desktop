@@ -1,0 +1,13 @@
+[Desktop Entry]
+Name=Linux 軟體套件安裝器
+Name[zh_TW]=Linux 軟體套件安裝器
+Name[zh_CN]=Linux 软件套件安装器
+Comment=Graphical app installer and manager for Pacman, AUR and Flatpak
+Comment[zh_TW]=視覺化套件安裝器與管理工具，支援 Pacman、AUR 及 Flatpak
+Comment[zh_CN]=视觉化套件安装器与管理工具，支持 Pacman、AUR 及 Flatpak
+Exec=arch-app-installer %F
+Icon=system-software-install
+Terminal=false
+Type=Application
+Categories=System;Settings;
+MimeType=application/x-xpinstall;application/vnd.flatpak;application/vnd.flatpak.ref;application/x-shared-library-la;

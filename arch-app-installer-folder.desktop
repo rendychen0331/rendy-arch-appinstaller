@@ -1,0 +1,13 @@
+[Desktop Entry]
+Type=Service
+ServiceTypes=KonqPopupMenu/Plugin
+MimeType=inode/directory;
+Actions=openInstaller;
+X-KDE-Priority=TopLevel
+
+[Desktop Action openInstaller]
+Name=開啟 Linux 套件安裝器
+Name[zh_TW]=開啟 Linux 套件安裝器
+Name[zh_CN]=開啟 Linux 套件安裝器
+Icon=system-software-install
+Exec=arch-app-installer
