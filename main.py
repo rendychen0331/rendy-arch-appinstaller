@@ -1366,6 +1366,21 @@ class AppInstallerWindow(Adw.ApplicationWindow):
         env = os.environ.copy()
         env["SUDO_ASKPASS"] = askpass_path
         
+        # Pre-authenticate sudo for yay/AUR commands to prevent password prompts mid-build
+        if cmd[0] == "yay":
+            self.update_status_idle("正在驗證管理員權限...")
+            self.append_terminal_line("[*] 正在驗證管理員授權以利後續自動安裝...\n")
+            pre_auth_res = subprocess.run(
+                ["sudo", "-v"],
+                env=env,
+                stdout=subprocess.PIPE,
+                stderr=subprocess.PIPE
+            )
+            if pre_auth_res.returncode != 0:
+                self.append_terminal_line("[-] 管理員授權失敗，取消安裝。\n")
+                return False
+            self.append_terminal_line("[+] 授權成功，開始編譯與安裝。\n")
+            
         self.append_terminal_line(f"===> 啟動：{' '.join(cmd)}\n")
         
         try:
