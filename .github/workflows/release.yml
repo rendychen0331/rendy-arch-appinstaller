@@ -3,7 +3,7 @@ name: Auto Release on Tag
 on:
   push:
     tags:
-      - 'v*'
+      - '*'
 
 permissions:
   contents: write
@@ -17,10 +17,13 @@ jobs:
 
       - name: Build Arch Package in Docker
         run: |
-          docker run --rm -v $PWD:/workspace -w /workspace archlinux:latest bash -c "
+          docker run --rm -v $PWD:/workspace -w /workspace -e GITHUB_REF_NAME=${{ github.ref_name }} archlinux:latest bash -c "
             pacman-key --init && \
             pacman-key --populate archlinux && \
             pacman -Syu --noconfirm --needed base-devel && \
+            # Dynamically set PKGBUILD version to match the Git tag (e.g. v1.0 -> 1.0)
+            TAG_VER=\${GITHUB_REF_NAME#v} && \
+            sed -i \"s/^pkgver=.*/pkgver=\${TAG_VER}/\" PKGBUILD && \
             useradd -m builduser && \
             chown -R builduser:builduser . && \
             su builduser -c 'makepkg -d --noconfirm'
