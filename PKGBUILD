@@ -1,5 +1,5 @@
 # Maintainer: rendy <rendy@example.com>
-pkgname=arch-app-installer
+pkgname=rendy-arch-appinstaller
 pkgver=1.0.0
 pkgrel=1
 pkgdesc="基於 GTK 4 + Libadwaita 的視覺化套件安裝器與已安裝軟體管理器，支援 Pacman、AUR 及 Flatpak"
