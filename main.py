@@ -1130,7 +1130,7 @@ class AppInstallerWindow(Adw.ApplicationWindow):
             if exact_match['source'] == 'Pacman':
                 cmd = ["pkexec", "pacman", "-S", "--noconfirm", exact_match['name']]
             elif exact_match['source'] == 'AUR':
-                cmd = ["yay", "-S", "--noconfirm", exact_match['name']]
+                cmd = ["yay", "-S", "--noconfirm", "--sudo", "sudo", "--sudoflags", "-A", exact_match['name']]
             else:
                 cmd = ["flatpak", "install", "-y", "flathub", exact_match['app_id']]
                 
@@ -1257,7 +1257,7 @@ class AppInstallerWindow(Adw.ApplicationWindow):
         if pkg['source'] == 'Pacman':
             cmd = ["pkexec", "pacman", "-S", "--noconfirm", pkg['name']]
         elif pkg['source'] == 'AUR':
-            cmd = ["yay", "-S", "--noconfirm", pkg['name']]
+            cmd = ["yay", "-S", "--noconfirm", "--sudo", "sudo", "--sudoflags", "-A", pkg['name']]
         elif pkg['source'] == 'Flatpak':
             cmd = ["flatpak", "install", "-y", "flathub", pkg['app_id']]
             
@@ -1309,7 +1309,7 @@ class AppInstallerWindow(Adw.ApplicationWindow):
         if upg['source'] == 'Pacman':
             cmd = ["pkexec", "pacman", "-S", "--noconfirm", upg['name']]
         else:
-            cmd = ["yay", "-S", "--noconfirm", upg['name']]
+            cmd = ["yay", "-S", "--noconfirm", "--sudo", "sudo", "--sudoflags", "-A", upg['name']]
             
         thread = threading.Thread(
             target=self.run_install_thread,
@@ -1330,7 +1330,7 @@ class AppInstallerWindow(Adw.ApplicationWindow):
         self.main_stack.set_visible_child_name("install_page")
         self.should_cancel = False
         
-        cmd = ["yay", "-Syu", "--noconfirm"]
+        cmd = ["yay", "-Syu", "--noconfirm", "--sudo", "sudo", "--sudoflags", "-A"]
         
         thread = threading.Thread(
             target=self.run_install_thread,
