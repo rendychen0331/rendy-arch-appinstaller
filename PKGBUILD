@@ -11,10 +11,8 @@ source=('main.py'
         'search.py'
         'askpass.py'
         'rendy-arch-appinstaller'
-        'org.rendy.arch.appinstaller.desktop'
-        'rendy-arch-appinstaller-file.desktop')
+        'org.rendy.arch.appinstaller.desktop')
 sha256sums=('SKIP'
-            'SKIP'
             'SKIP'
             'SKIP'
             'SKIP'
@@ -34,8 +32,4 @@ package() {
     # 3. 安裝系統桌面捷徑到 /usr/share/applications/
     install -d "${pkgdir}/usr/share/applications"
     install -m644 "${srcdir}/org.rendy.arch.appinstaller.desktop" "${pkgdir}/usr/share/applications/org.rendy.arch.appinstaller.desktop"
-
-    # 4. 安裝系統級 Dolphin 右鍵選單服務選單 (適用於所有使用者)
-    install -d "${pkgdir}/usr/share/kio/servicemenus"
-    install -m644 "${srcdir}/rendy-arch-appinstaller-file.desktop" "${pkgdir}/usr/share/kio/servicemenus/rendy-arch-appinstaller-file.desktop"
 }

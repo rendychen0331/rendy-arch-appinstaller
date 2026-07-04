@@ -9,8 +9,6 @@
 3. **⚡ 一鍵自動智慧安裝**：輸入套件名稱後，程式將自動分析並按照最優優先級：**Pacman ➔ AUR ➔ Flatpak** 依序嘗試各類安裝指令，完全無需手動介入。
 4. **📟 終端機進度即時串流**：以極具質感的 VS Code 風格深色終端面板，即時呈現底層安裝與編譯指令的標準輸出與錯誤日誌，並支援平滑自動滾動與執行緒安全防護。
 5. **🛡️ 預先管理員提權**：安裝 AUR 套件時，程式會在一開始預先進行 `sudo -v` 驗證，並使用內建的 Python 圖形密碼視窗 (`askpass.py`) 接收密碼。輸入一次後即可享有 15 分鐘快取，讓漫長的 AUR 編譯與安裝流程全程自動化，免去中途彈出密碼的困擾。
-6. **🐬 KDE Dolphin 右鍵選單整合**：
-   - 右鍵點擊支援的套件檔案（如 `.pkg.tar.zst` 或 `.flatpak`）：顯示 **「使用 GUI 安裝套件」**
 
 ---
 
@@ -60,8 +58,6 @@ rendy-arch-appinstaller
 rendy-arch-appinstaller google-chrome
 ```
 
-### 3. Dolphin 右鍵選單整合與桌面選單
+### 3. 系統捷徑選單
 系統安裝完畢後，軟體會自動在以下系統目錄寫入配置：
 * 系統應用程式選單：`/usr/share/applications/org.rendy.arch.appinstaller.desktop`
-* Dolphin 右鍵選單：
-  - `/usr/share/kio/servicemenus/rendy-arch-appinstaller-file.desktop`
