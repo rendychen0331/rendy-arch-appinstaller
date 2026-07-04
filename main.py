@@ -1130,7 +1130,7 @@ class AppInstallerWindow(Adw.ApplicationWindow):
             if exact_match['source'] == 'Pacman':
                 cmd = ["pkexec", "pacman", "-S", "--noconfirm", exact_match['name']]
             elif exact_match['source'] == 'AUR':
-                cmd = ["yay", "-S", "--noconfirm", "--sudo", "pkexec", exact_match['name']]
+                cmd = ["yay", "-S", "--noconfirm", exact_match['name']]
             else:
                 cmd = ["flatpak", "install", "-y", "flathub", exact_match['app_id']]
                 
@@ -1181,7 +1181,7 @@ class AppInstallerWindow(Adw.ApplicationWindow):
         
         if aur_check.returncode == 0:
             self.append_terminal_line(f"[+] 找到 AUR 社群軟體包：'{query}'。準備使用 yay 編譯安裝。\n")
-            cmd = ["yay", "-S", "--noconfirm", "--sudo", "pkexec", query]
+            cmd = ["yay", "-S", "--noconfirm", query]
             success = self.execute_install_command(cmd, "yay (AUR 套件管理員)")
             if success:
                 self.finish_installation(True, f"成功透過 AUR 安裝 '{query}'。")
@@ -1257,7 +1257,7 @@ class AppInstallerWindow(Adw.ApplicationWindow):
         if pkg['source'] == 'Pacman':
             cmd = ["pkexec", "pacman", "-S", "--noconfirm", pkg['name']]
         elif pkg['source'] == 'AUR':
-            cmd = ["yay", "-S", "--noconfirm", "--sudo", "pkexec", pkg['name']]
+            cmd = ["yay", "-S", "--noconfirm", pkg['name']]
         elif pkg['source'] == 'Flatpak':
             cmd = ["flatpak", "install", "-y", "flathub", pkg['app_id']]
             
@@ -1309,7 +1309,7 @@ class AppInstallerWindow(Adw.ApplicationWindow):
         if upg['source'] == 'Pacman':
             cmd = ["pkexec", "pacman", "-S", "--noconfirm", upg['name']]
         else:
-            cmd = ["yay", "-S", "--noconfirm", "--sudo", "pkexec", upg['name']]
+            cmd = ["yay", "-S", "--noconfirm", upg['name']]
             
         thread = threading.Thread(
             target=self.run_install_thread,
@@ -1330,7 +1330,7 @@ class AppInstallerWindow(Adw.ApplicationWindow):
         self.main_stack.set_visible_child_name("install_page")
         self.should_cancel = False
         
-        cmd = ["yay", "-Syu", "--noconfirm", "--sudo", "pkexec"]
+        cmd = ["yay", "-Syu", "--noconfirm"]
         
         thread = threading.Thread(
             target=self.run_install_thread,
