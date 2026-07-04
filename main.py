@@ -1458,7 +1458,8 @@ class AppInstallerWindow(Adw.ApplicationWindow):
     def on_back_to_search_clicked(self, widget):
         self.btn_back_to_search.set_sensitive(False)
         
-        # Direct user back to Installed tab by default
+        # Force a selection change signal trigger by deselecting first
+        self.sidebar_list.select_row(None)
         self.sidebar_list.select_row(self.row_installed)
         
         # Silently trigger background update check to keep updates badge current
