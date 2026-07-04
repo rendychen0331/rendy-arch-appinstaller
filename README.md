@@ -11,7 +11,6 @@
 5. **🛡️ 預先管理員提權**：安裝 AUR 套件時，程式會在一開始預先進行 `sudo -v` 驗證，並使用內建的 Python 圖形密碼視窗 (`askpass.py`) 接收密碼。輸入一次後即可享有 15 分鐘快取，讓漫長的 AUR 編譯與安裝流程全程自動化，免去中途彈出密碼的困擾。
 6. **🐬 KDE Dolphin 右鍵選單整合**：
    - 右鍵點擊支援的套件檔案（如 `.pkg.tar.zst` 或 `.flatpak`）：顯示 **「使用 GUI 安裝套件」**
-   - 右鍵點擊任何資料夾或空白處：顯示 **「開啟 Linux 套件安裝器」**
 
 ---
 
@@ -66,4 +65,3 @@ rendy-arch-appinstaller google-chrome
 * 系統應用程式選單：`/usr/share/applications/org.rendy.arch.appinstaller.desktop`
 * Dolphin 右鍵選單：
   - `/usr/share/kio/servicemenus/rendy-arch-appinstaller-file.desktop`
-  - `/usr/share/kio/servicemenus/rendy-arch-appinstaller-folder.desktop`
