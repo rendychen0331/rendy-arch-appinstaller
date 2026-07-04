@@ -5,3 +5,9 @@ __pycache__/
 .pytest_cache/
 .vscode/
 .idea/
+
+# Arch Linux package build artifacts
+pkg/
+src/
+*.pkg.tar.*
+*.log
