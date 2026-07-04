@@ -10,4 +10,4 @@ Name=開啟 Linux 套件安裝器
 Name[zh_TW]=開啟 Linux 套件安裝器
 Name[zh_CN]=開啟 Linux 套件安裝器
 Icon=system-software-install
-Exec=arch-app-installer
+Exec=rendy-arch-appinstaller

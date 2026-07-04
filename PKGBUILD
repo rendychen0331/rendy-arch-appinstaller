@@ -10,10 +10,10 @@ depends=('python' 'python-gobject' 'gtk4' 'libadwaita' 'yay' 'flatpak')
 source=('main.py'
         'search.py'
         'askpass.py'
-        'arch-app-installer'
+        'rendy-arch-appinstaller'
         'org.rendy.arch.appinstaller.desktop'
-        'arch-app-installer-file.desktop'
-        'arch-app-installer-folder.desktop')
+        'rendy-arch-appinstaller-file.desktop'
+        'rendy-arch-appinstaller-folder.desktop')
 sha256sums=('SKIP'
             'SKIP'
             'SKIP'
@@ -31,7 +31,7 @@ package() {
 
     # 2. 安裝命令列封裝器到 /usr/bin/
     install -d "${pkgdir}/usr/bin"
-    install -m755 "${srcdir}/arch-app-installer" "${pkgdir}/usr/bin/arch-app-installer"
+    install -m755 "${srcdir}/rendy-arch-appinstaller" "${pkgdir}/usr/bin/rendy-arch-appinstaller"
 
     # 3. 安裝系統桌面捷徑到 /usr/share/applications/
     install -d "${pkgdir}/usr/share/applications"
@@ -39,6 +39,6 @@ package() {
 
     # 4. 安裝系統級 Dolphin 右鍵選單服務選單 (適用於所有使用者)
     install -d "${pkgdir}/usr/share/kio/servicemenus"
-    install -m644 "${srcdir}/arch-app-installer-file.desktop" "${pkgdir}/usr/share/kio/servicemenus/arch-app-installer-file.desktop"
-    install -m644 "${srcdir}/arch-app-installer-folder.desktop" "${pkgdir}/usr/share/kio/servicemenus/arch-app-installer-folder.desktop"
+    install -m644 "${srcdir}/rendy-arch-appinstaller-file.desktop" "${pkgdir}/usr/share/kio/servicemenus/rendy-arch-appinstaller-file.desktop"
+    install -m644 "${srcdir}/rendy-arch-appinstaller-folder.desktop" "${pkgdir}/usr/share/kio/servicemenus/rendy-arch-appinstaller-folder.desktop"
 }

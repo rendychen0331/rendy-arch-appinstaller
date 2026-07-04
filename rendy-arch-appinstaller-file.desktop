@@ -10,4 +10,4 @@ Name=使用 GUI 安裝套件
 Name[zh_TW]=使用 GUI 安裝套件
 Name[zh_CN]=使用 GUI 安装套件
 Icon=system-software-install
-Exec=arch-app-installer %f
+Exec=rendy-arch-appinstaller %f
