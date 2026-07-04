@@ -262,25 +262,40 @@ def search_all(query):
     # 1. Fetch local installed package list with versions once
     installed_dict = get_installed_pacman_packages_dict()
     
-    # 2. Try official JSON API first
-    arch_pkgs = search_official_packages_api(query, installed_dict)
-    aur_pkgs = None
-    
-    # 3. If official API succeeded, fetch AUR API
-    if arch_pkgs is not None:
-        aur_pkgs = search_aur_packages_api(query, installed_dict)
+    # Generate query variations to handle spaces (e.g., "google chrome" -> ["google chrome", "google-chrome"])
+    queries = [query]
+    normalized = query.replace(' ', '-')
+    if normalized != query:
+        queries.append(normalized)
         
-    # 4. Fallback to local 'yay' execution if any web API failed
-    if arch_pkgs is None or aur_pkgs is None:
-        print("[*] Web API failed or offline. Falling back to local yay command...")
-        combined_arch = search_arch_packages_local(query, installed_dict)
-    else:
-        combined_arch = arch_pkgs + aur_pkgs
+    combined_arch = []
+    
+    for q_item in queries:
+        arch_pkgs = search_official_packages_api(q_item, installed_dict)
+        aur_pkgs = None
+        if arch_pkgs is not None:
+            aur_pkgs = search_aur_packages_api(q_item, installed_dict)
+            
+        if arch_pkgs is None or aur_pkgs is None:
+            # Fallback to local
+            arch_pkgs = search_arch_packages_local(q_item, installed_dict)
+            aur_pkgs = []
+            
+        combined_arch.extend(arch_pkgs + aur_pkgs)
+        
+    # De-duplicate by name and source
+    seen = set()
+    unique_arch = []
+    for pkg in combined_arch:
+        key = (pkg['name'], pkg['source'])
+        if key not in seen:
+            seen.add(key)
+            unique_arch.append(pkg)
 
     # 5. Fetch Flatpaks (local cache search is extremely fast)
     flatpak_pkgs = search_flatpak_packages(query)
     
-    combined = combined_arch + flatpak_pkgs
+    combined = unique_arch + flatpak_pkgs
     
     # 6. Sort by match score and installed status to keep GUI rendering smooth
     q = query.lower()
@@ -290,21 +305,23 @@ def search_all(query):
         app_id = (pkg.get('app_id') or '').lower()
         desc = (pkg.get('description') or '').lower()
         
-        # Smart VS Code alias matching
+        # Smart VS Code & Chrome alias matching
         is_vscode_query = q in ('vscode', 'vs-code', 'vsc')
+        is_chrome_query = q in ('google chrome', 'google-chrome', 'chrome')
         norm_name = name.replace('-', ' ').replace('_', ' ')
+        norm_id = app_id.replace('-', ' ').replace('_', ' ')
         
         # 1. Exact name match
-        if name == q or (is_vscode_query and (name == 'visual-studio-code' or norm_name == 'visual studio code')):
+        if name == q or (is_vscode_query and (name == 'visual-studio-code' or norm_name == 'visual studio code')) or (is_chrome_query and name == 'google-chrome'):
             return 0
             
         # 2. Exact ID match
-        if app_id == q:
+        if app_id == q or (is_chrome_query and (app_id == 'com.google.chrome' or norm_id == 'com google chrome')):
             return 1
             
         # 3. Word-boundary match in package name
         name_words = re.split(r'[\-_\.\s]+', name)
-        if q in name_words or (is_vscode_query and (name == 'code' or 'visual studio code' in norm_name)):
+        if q in name_words or (is_vscode_query and (name == 'code' or 'visual studio code' in norm_name)) or (is_chrome_query and name == 'google-chrome-beta'):
             return 2
             
         # 4. Package name starts with query
