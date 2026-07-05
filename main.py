@@ -495,6 +495,13 @@ class AppInstallerWindow(Adw.ApplicationWindow):
         self.lang_combo.set_active_id(self.current_lang)
         self.lang_combo.set_hexpand(True)
         self.lang_combo.connect("changed", self.on_language_changed)
+        
+        # Disable scroll wheel event on ComboBox to prevent accidental language switches
+        scroll_controller = Gtk.EventControllerScroll.new(Gtk.EventControllerScrollFlags.BOTH_AXES)
+        scroll_controller.set_propagation_phase(Gtk.PropagationPhase.CAPTURE)
+        scroll_controller.connect("scroll", lambda controller, dx, dy: True)
+        self.lang_combo.add_controller(scroll_controller)
+        
         lang_box.append(self.lang_combo)
         
         sidebar_panel.append(lang_box)
