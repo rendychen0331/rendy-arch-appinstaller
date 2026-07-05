@@ -1,8 +1,4 @@
-import sys
-import os
-import threading
-import subprocess
-import re
+import json
 import gi
 
 gi.require_version('Gtk', '4.0')
@@ -12,13 +8,245 @@ from gi.repository import Gtk, Gdk, GLib, Gio, Adw
 # Import search functions
 from search import search_all, is_flatpak_installed
 
+# --- INTERNATIONALIZATION (i18n) CONFIGURATION ---
+CONFIG_DIR = os.path.expanduser("~/.config/rendy-arch-appinstaller")
+CONFIG_FILE = os.path.join(CONFIG_DIR, "config.json")
+
+def load_config():
+    try:
+        if os.path.exists(CONFIG_FILE):
+            with open(CONFIG_FILE, 'r') as f:
+                return json.load(f)
+    except Exception:
+        pass
+    return {}
+
+def save_config(config):
+    try:
+        os.makedirs(CONFIG_DIR, exist_ok=True)
+        with open(CONFIG_FILE, 'w') as f:
+            json.dump(config, f)
+    except Exception:
+        pass
+
+TRANSLATIONS = {
+    'zh_TW': {
+        'window_title': 'Linux 軟體商店',
+        'window_subtitle': '探索、安裝、管理應用軟體',
+        'app_title': '應用商店',
+        'tab_installed': '📦 已安裝管理',
+        'tab_search': '🔍 軟體搜尋',
+        'tab_updates': '⚙️ 可更新項目',
+        'sub_installed': '管理您已安裝的應用程式',
+        'sub_search': '搜尋 Pacman、AUR 與 Flatpak 軟體包',
+        'sub_updates': '系統安全更新與軟體升級',
+        'search_title': '軟體搜尋',
+        'search_placeholder': '輸入關鍵字進行搜尋，例如：code, gimp, chrome...',
+        'btn_search': '🔍 搜尋',
+        'btn_auto_install': '⚡ 一鍵自動安裝',
+        'filter_pacman': '官方倉庫 (Pacman)',
+        'filter_aur': '使用者倉庫 (AUR)',
+        'filter_flatpak': '沙盒套件 (Flatpak)',
+        'search_intro': '輸入關鍵字，探索您的系統應用',
+        'search_loading': '正在搜尋 \'{query}\'，請稍候...',
+        'installed_title': '已安裝的軟體',
+        'btn_refresh': '🔄 重新整理',
+        'no_installed_packages': '目前無已安裝的套件。',
+        'desc_aur': '系統社群軟體包 (AUR Explicit)',
+        'desc_pacman': '系統官方軟體包 (Pacman Explicit)',
+        'desc_flatpak': 'Flatpak 沙盒應用程式 ({app_id})',
+        'label_has_update': '▲ 有更新 (本機: {version})',
+        'label_installed': '✓ 已安裝',
+        'no_description': '無詳細描述。',
+        'pkg_details': '版本: {version} | 庫區: {repo}',
+        'btn_update_pkg': '更新',
+        'btn_reinstall_pkg': '重新安裝',
+        'btn_install_pkg': '安裝',
+        'updates_title': '系統更新與升級',
+        'btn_update_all': '⚡ 全部更新',
+        'btn_check_updates': '🔄 檢查更新',
+        'system_up_to_date': '所有軟體皆為最新，無須更新！',
+        'update_detail': '待更新: {old} ➔ {new}',
+        'btn_upgrade_single': '升級',
+        'install_title_running': '正在執行操作...',
+        'install_status_preparing': '正在準備...',
+        'btn_cancel': '取消',
+        'btn_back': '返回首頁',
+        'status_installing': '正在安裝 \'{pkg_name}\'...',
+        'status_uninstalling': '正在卸載 \'{pkg_name}\'...',
+        'status_upgrading': '正在升級 \'{pkg_name}\'...',
+        'status_sys_upgrade': '正在執行全系統升級...',
+        'status_searching_match': '搜尋匹配的套件中...',
+        'status_preparing': '準備中...',
+        'status_preparing_uninstall': '準備卸載中...',
+        'status_preparing_upgrade': '準備升級中...',
+        'status_sys_upgrade_running': '全系統升級中...',
+        'status_preparing_local': '準備安裝本地檔...',
+        'status_cancelling': '正在取消中...',
+        'msg_install_success': '成功安裝 \'{name}\'。',
+        'msg_install_failed': '安裝 \'{name}\' 失敗。',
+        'msg_pacman_success': '成功透過 Pacman 安裝 \'{name}\'。',
+        'msg_aur_success': '成功透過 AUR 安裝 \'{name}\'。',
+        'msg_flatpak_success': '成功透過 Flatpak 安裝 \'{name}\'。',
+        'msg_uninstall_success': '成功卸載 \'{name}\'。',
+        'msg_uninstall_failed': '卸載 \'{name}\' 失敗。',
+        'msg_auto_install_failed': '自動安裝失敗：在 Pacman, AUR 及 Flatpak 中皆找不到或無法安裝 \'{name}\'。',
+        'terminal_pre_auth': '[*] 正在驗證管理員授權以利後續自動安裝...\n',
+        'terminal_pre_auth_success': '[+] 授權成功，開始編譯與安裝。\n',
+        'terminal_pre_auth_failed': '[-] 管理員授權失敗，取消安裝。\n',
+    },
+    'zh_CN': {
+        'window_title': 'Linux 软件商店',
+        'window_subtitle': '探索、安装、管理应用软件',
+        'app_title': '应用商店',
+        'tab_installed': '📦 已安装管理',
+        'tab_search': '🔍 软件搜寻',
+        'tab_updates': '⚙️ 可更新项目',
+        'sub_installed': '管理您已安装的应用程序',
+        'sub_search': '搜寻 Pacman、AUR 与 Flatpak 软件包',
+        'sub_updates': '系统安全更新与软件升级',
+        'search_title': '软件搜寻',
+        'search_placeholder': '输入关键字进行搜寻，例如：code, gimp, chrome...',
+        'btn_search': '🔍 搜寻',
+        'btn_auto_install': '⚡ 一键自动安装',
+        'filter_pacman': '官方仓库 (Pacman)',
+        'filter_aur': '使用者仓库 (AUR)',
+        'filter_flatpak': '沙盒套件 (Flatpak)',
+        'search_intro': '输入关键字，探索您的系统应用',
+        'search_loading': '正在搜寻 \'{query}\'，请稍候...',
+        'installed_title': '已安装的软件',
+        'btn_refresh': '🔄 重新整理',
+        'no_installed_packages': '目前无已安装的套件。',
+        'desc_aur': '系统社群软件包 (AUR Explicit)',
+        'desc_pacman': '系统官方软件包 (Pacman Explicit)',
+        'desc_flatpak': 'Flatpak 沙盒应用程序 ({app_id})',
+        'label_has_update': '▲ 有更新 (本机: {version})',
+        'label_installed': '✓ 已安装',
+        'no_description': '无详细描述。',
+        'pkg_details': '版本: {version} | 库区: {repo}',
+        'btn_update_pkg': '更新',
+        'btn_reinstall_pkg': '重新安装',
+        'btn_install_pkg': '安装',
+        'updates_title': '系统更新与升级',
+        'btn_update_all': '⚡ 全部更新',
+        'btn_check_updates': '🔄 检查更新',
+        'system_up_to_date': '所有软件皆为最新，无须更新！',
+        'update_detail': '待更新: {old} ➔ {new}',
+        'btn_upgrade_single': '升级',
+        'install_title_running': '正在执行操作...',
+        'install_status_preparing': '正在准备...',
+        'btn_cancel': '取消',
+        'btn_back': '返回首页',
+        'status_installing': '正在安装 \'{pkg_name}\'...',
+        'status_uninstalling': '正在卸载 \'{pkg_name}\'...',
+        'status_upgrading': '正在升级 \'{pkg_name}\'...',
+        'status_sys_upgrade': '正在执行全系统升级...',
+        'status_searching_match': '搜寻匹配的套件中...',
+        'status_preparing': '准备中...',
+        'status_preparing_uninstall': '准备卸载中...',
+        'status_preparing_upgrade': '准备升级中...',
+        'status_sys_upgrade_running': '全系统升级中...',
+        'status_preparing_local': '准备安装本地档...',
+        'status_cancelling': '正在取消中...',
+        'msg_install_success': '成功安装 \'{name}\'。',
+        'msg_install_failed': '安装 \'{name}\' 失败。',
+        'msg_pacman_success': '成功透过 Pacman 安装 \'{name}\'。',
+        'msg_aur_success': '成功透過 AUR 安装 \'{name}\'。',
+        'msg_flatpak_success': '成功透过 Flatpak 安装 \'{name}\'。',
+        'msg_uninstall_success': '成功卸载 \'{name}\'。',
+        'msg_uninstall_failed': '卸载 \'{name}\' 失败。',
+        'msg_auto_install_failed': '自动安装失败：在 Pacman, AUR 及 Flatpak 中皆找不到或无法安装 \'{name}\'。',
+        'terminal_pre_auth': '[*] 正在验证管理员授权以利后续自动安装...\n',
+        'terminal_pre_auth_success': '[+] 授权成功，开始编译与安装。\n',
+        'terminal_pre_auth_failed': '[-] 管理员授权失败，取消安装。\n',
+    },
+    'en': {
+        'window_title': 'Linux App Store',
+        'window_subtitle': 'Discover, install, and manage software',
+        'app_title': 'App Store',
+        'tab_installed': '📦 Installed',
+        'tab_search': '🔍 Search',
+        'tab_updates': '⚙️ Updates',
+        'sub_installed': 'Manage your installed applications',
+        'sub_search': 'Search Pacman, AUR, and Flatpak packages',
+        'sub_updates': 'System safety updates and package upgrades',
+        'search_title': 'Software Search',
+        'search_placeholder': 'Enter keywords to search, e.g. code, gimp, chrome...',
+        'btn_search': '🔍 Search',
+        'btn_auto_install': '⚡ One-Click Install',
+        'filter_pacman': 'Official Repo (Pacman)',
+        'filter_aur': 'User Repo (AUR)',
+        'filter_flatpak': 'Sandbox (Flatpak)',
+        'search_intro': 'Enter keywords to discover system applications',
+        'search_loading': 'Searching for \'{query}\', please wait...',
+        'installed_title': 'Installed Applications',
+        'btn_refresh': '🔄 Refresh',
+        'no_installed_packages': 'No packages installed currently.',
+        'desc_aur': 'System Community Package (AUR Explicit)',
+        'desc_pacman': 'System Official Package (Pacman Explicit)',
+        'desc_flatpak': 'Flatpak Sandbox Application ({app_id})',
+        'label_has_update': '▲ Update available (Local: {version})',
+        'label_installed': '✓ Installed',
+        'no_description': 'No description available.',
+        'pkg_details': 'Version: {version} | Repo: {repo}',
+        'btn_update_pkg': 'Update',
+        'btn_reinstall_pkg': 'Reinstall',
+        'btn_install_pkg': 'Install',
+        'updates_title': 'System Updates',
+        'btn_update_all': '⚡ Update All',
+        'btn_check_updates': '🔄 Check Updates',
+        'system_up_to_date': 'All packages are up to date!',
+        'update_detail': 'Update: {old} ➔ {new}',
+        'btn_upgrade_single': 'Upgrade',
+        'install_title_running': 'Executing operation...',
+        'install_status_preparing': 'Preparing...',
+        'btn_cancel': 'Cancel',
+        'btn_back': 'Back to Home',
+        'status_installing': 'Installing \'{pkg_name}\'...',
+        'status_uninstalling': 'Uninstalling \'{pkg_name}\'...',
+        'status_upgrading': 'Upgrading \'{pkg_name}\'...',
+        'status_sys_upgrade': 'Running full system upgrade...',
+        'status_searching_match': 'Searching for matching packages...',
+        'status_preparing': 'Preparing...',
+        'status_preparing_uninstall': 'Preparing to uninstall...',
+        'status_preparing_upgrade': 'Preparing to upgrade...',
+        'status_sys_upgrade_running': 'System upgrade in progress...',
+        'status_preparing_local': 'Preparing local package installation...',
+        'status_cancelling': 'Cancelling...',
+        'msg_install_success': 'Successfully installed \'{name}\'.',
+        'msg_install_failed': 'Failed to install \'{name}\'.',
+        'msg_pacman_success': 'Successfully installed \'{name}\' via Pacman.',
+        'msg_aur_success': 'Successfully installed \'{name}\' via AUR.',
+        'msg_flatpak_success': 'Successfully installed \'{name}\' via Flatpak.',
+        'msg_uninstall_success': 'Successfully uninstalled \'{name}\'.',
+        'msg_uninstall_failed': 'Failed to uninstall \'{name}\'.',
+        'msg_auto_install_failed': 'Auto-install failed: \'{name}\' not found or could not be installed.',
+        'terminal_pre_auth': '[*] Authenticating administrator privilege for automatic installation...\n',
+        'terminal_pre_auth_success': '[+] Authentication succeeded. Starting compilation and installation.\n',
+        'terminal_pre_auth_failed': '[-] Authentication failed. Aborting installation.\n',
+    }
+}
+
 class AppInstallerWindow(Adw.ApplicationWindow):
     def __init__(self, app):
         super().__init__(application=app)
         
-        self.set_title("應用商店 (Arch App Center)")
-        self.set_default_size(960, 690)
+        # Load user configuration
+        self.config = load_config()
+        
+        # Auto-detect language
+        default_lang = 'zh_TW'
+        lang_env = os.environ.get('LANG', '')
+        if 'zh_CN' in lang_env:
+            default_lang = 'zh_CN'
+        elif 'en' in lang_env:
+            default_lang = 'en'
+            
+        self.current_lang = self.config.get('language', default_lang)
         self.should_cancel = False
+        
+        self.set_title(self.tr('window_title'))
+        self.set_default_size(960, 690)
         
         # Build UI
         self.build_ui()
@@ -215,9 +443,9 @@ class AppInstallerWindow(Adw.ApplicationWindow):
         app_logo.set_markup("<span size='large'>🛍️</span>")
         sidebar_header.append(app_logo)
         
-        app_title = Gtk.Label()
-        app_title.set_markup("<span weight='bold' size='medium'>應用商店</span>")
-        sidebar_header.append(app_title)
+        self.app_title_label = Gtk.Label()
+        self.app_title_label.set_markup("<span weight='bold' size='medium'>應用商店</span>")
+        sidebar_header.append(self.app_title_label)
         sidebar_panel.append(sidebar_header)
         
         # Sidebar Menu ListBox
@@ -225,9 +453,9 @@ class AppInstallerWindow(Adw.ApplicationWindow):
         self.sidebar_list.set_selection_mode(Gtk.SelectionMode.SINGLE)
         self.sidebar_list.connect("row-selected", self.on_sidebar_row_selected)
         
-        self.row_installed = self.create_sidebar_row("📦 已安裝管理", "installed_page")
-        self.row_search = self.create_sidebar_row("🔍 軟體搜尋", "search_page")
-        self.row_updates = self.create_sidebar_row("⚙️ 可更新項目", "updates_page")
+        self.row_installed = self.create_sidebar_row("", "installed_page")
+        self.row_search = self.create_sidebar_row("", "search_page")
+        self.row_updates = self.create_sidebar_row("", "updates_page")
         
         # Add badge container to updates row
         self.updates_badge_label = Gtk.Label(label="")
@@ -240,6 +468,32 @@ class AppInstallerWindow(Adw.ApplicationWindow):
         self.sidebar_list.append(self.row_updates)
         sidebar_panel.append(self.sidebar_list)
         
+        # Spacer to push language switcher to the bottom
+        spacer = Gtk.Box()
+        spacer.set_vexpand(True)
+        sidebar_panel.append(spacer)
+        
+        # Language Switcher
+        lang_box = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=6)
+        lang_box.set_margin_start(12)
+        lang_box.set_margin_end(12)
+        lang_box.set_margin_bottom(16)
+        lang_box.set_halign(Gtk.Align.FILL)
+        
+        lang_icon = Gtk.Image.new_from_icon_name("preferences-desktop-locale")
+        lang_box.append(lang_icon)
+        
+        self.lang_combo = Gtk.ComboBoxText()
+        self.lang_combo.append("zh_TW", "繁體中文")
+        self.lang_combo.append("zh_CN", "简体中文")
+        self.lang_combo.append("en", "English")
+        self.lang_combo.set_active_id(self.current_lang)
+        self.lang_combo.set_hexpand(True)
+        self.lang_combo.connect("changed", self.on_language_changed)
+        lang_box.append(self.lang_combo)
+        
+        sidebar_panel.append(lang_box)
+        
         main_layout.append(sidebar_panel)
         
         # 2. Right Side Content Panel
@@ -249,7 +503,7 @@ class AppInstallerWindow(Adw.ApplicationWindow):
         
         # Window Header
         self.header = Adw.HeaderBar()
-        self.title_widget = Adw.WindowTitle(title="Linux 軟體商店", subtitle="探索、安裝、管理應用軟體")
+        self.title_widget = Adw.WindowTitle(title="", subtitle="")
         self.header.set_title_widget(self.title_widget)
         right_container.append(self.header)
         
@@ -270,6 +524,9 @@ class AppInstallerWindow(Adw.ApplicationWindow):
         self.main_stack.add_named(self.search_page, "search_page")
         self.main_stack.add_named(self.updates_page, "updates_page")
         self.main_stack.add_named(self.install_page, "install_page")
+        
+        # Apply language updates to all UI elements
+        self.apply_language()
         
         # Default select Installed tab
         self.sidebar_list.select_row(self.row_installed)
@@ -294,6 +551,7 @@ class AppInstallerWindow(Adw.ApplicationWindow):
         
         row.set_child(box)
         row.add_css_class("sidebar-item")
+        row.label_widget = lbl
         return row
 
     def on_sidebar_row_selected(self, listbox, row):
@@ -307,13 +565,74 @@ class AppInstallerWindow(Adw.ApplicationWindow):
             
             # Update Header Subtitle and Refresh Lists
             if row.page_name == "installed_page":
-                self.title_widget.set_subtitle("管理您已安裝的應用程式")
+                self.title_widget.set_subtitle(self.tr('sub_installed'))
                 self.refresh_installed_list()
             elif row.page_name == "search_page":
-                self.title_widget.set_subtitle("搜尋 Pacman、AUR 與 Flatpak 軟體包")
+                self.title_widget.set_subtitle(self.tr('sub_search'))
             elif row.page_name == "updates_page":
-                self.title_widget.set_subtitle("系統安全更新與軟體升級")
+                self.title_widget.set_subtitle(self.tr('sub_updates'))
                 self.refresh_updates_list()
+
+    def tr(self, key):
+        return TRANSLATIONS.get(self.current_lang, TRANSLATIONS['zh_TW']).get(key, key)
+
+    def on_language_changed(self, combo):
+        selected_id = combo.get_active_id()
+        if hasattr(self, 'main_stack') and selected_id and selected_id != self.current_lang:
+            self.current_lang = selected_id
+            self.config['language'] = selected_id
+            save_config(self.config)
+            self.apply_language()
+
+    def apply_language(self):
+        # 1. Window Title & Subtitle
+        self.set_title(self.tr('window_title'))
+        self.title_widget.set_title(self.tr('window_title'))
+        
+        # 2. Sidebar items
+        self.app_title_label.set_markup(f"<span weight='bold' size='medium'>{self.tr('app_title')}</span>")
+        self.row_installed.label_widget.set_text(self.tr('tab_installed'))
+        self.row_search.label_widget.set_text(self.tr('tab_search'))
+        self.row_updates.label_widget.set_text(self.tr('tab_updates'))
+        
+        # Update active subtitle
+        selected_row = self.sidebar_list.get_selected_row()
+        if selected_row == self.row_installed:
+            self.title_widget.set_subtitle(self.tr('sub_installed'))
+        elif selected_row == self.row_search:
+            self.title_widget.set_subtitle(self.tr('sub_search'))
+        elif selected_row == self.row_updates:
+            self.title_widget.set_subtitle(self.tr('sub_updates'))
+            
+        # 3. Search Page
+        self.search_title.set_markup(f"<span size='large' weight='bold'>{self.tr('search_title')}</span>")
+        self.search_entry.set_placeholder_text(self.tr('search_placeholder'))
+        self.btn_search.set_label(self.tr('btn_search'))
+        self.btn_auto_install.set_label(self.tr('btn_auto_install'))
+        self.filter_pacman.set_label(self.tr('filter_pacman'))
+        self.filter_aur.set_label(self.tr('filter_aur'))
+        self.filter_flatpak.set_label(self.tr('filter_flatpak'))
+        if not self.results_scroll.get_visible():
+            self.search_status_label.set_text(self.tr('search_intro'))
+            
+        # 4. Installed Page
+        self.installed_title.set_markup(f"<span size='large' weight='bold'>{self.tr('installed_title')}</span>")
+        self.btn_refresh_installed.set_label(self.tr('btn_refresh'))
+        
+        # 5. Updates Page
+        self.updates_title.set_markup(f"<span size='large' weight='bold'>{self.tr('updates_title')}</span>")
+        self.btn_update_all.set_label(self.tr('btn_update_all'))
+        self.btn_check_updates.set_label(self.tr('btn_check_updates'))
+        
+        # 6. Install Page
+        self.btn_cancel_install.set_label(self.tr('btn_cancel'))
+        self.btn_back_to_search.set_label(self.tr('btn_back'))
+        
+        # Force reload loaded list views to translate dynamic rows
+        if selected_row == self.row_installed:
+            self.refresh_installed_list()
+        elif selected_row == self.row_updates:
+            self.refresh_updates_list()
 
     # --- 1. DISCOVER PAGE ---
 
@@ -443,10 +762,10 @@ class AppInstallerWindow(Adw.ApplicationWindow):
         search_panel.set_margin_end(24)
         
         # Title
-        search_title = Gtk.Label()
-        search_title.set_markup("<span size='large' weight='bold'>軟體搜尋</span>")
-        search_title.set_halign(Gtk.Align.START)
-        search_panel.append(search_title)
+        self.search_title = Gtk.Label()
+        self.search_title.set_markup("<span size='large' weight='bold'>軟體搜尋</span>")
+        self.search_title.set_halign(Gtk.Align.START)
+        search_panel.append(self.search_title)
         
         # Search Box
         search_hbox = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=8)
@@ -539,15 +858,15 @@ class AppInstallerWindow(Adw.ApplicationWindow):
         # Title and refresh top row
         hbox_top = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=12)
         
-        lbl_title = Gtk.Label()
-        lbl_title.set_markup("<span size='large' weight='bold'>已安裝的軟體</span>")
-        lbl_title.set_hexpand(True)
-        lbl_title.set_halign(Gtk.Align.START)
-        hbox_top.append(lbl_title)
+        self.installed_title = Gtk.Label()
+        self.installed_title.set_markup("<span size='large' weight='bold'>已安裝的軟體</span>")
+        self.installed_title.set_hexpand(True)
+        self.installed_title.set_halign(Gtk.Align.START)
+        hbox_top.append(self.installed_title)
         
-        btn_refresh = Gtk.Button(label="🔄 重新整理")
-        btn_refresh.connect("clicked", lambda b: self.refresh_installed_list())
-        hbox_top.append(btn_refresh)
+        self.btn_refresh_installed = Gtk.Button(label="🔄 重新整理")
+        self.btn_refresh_installed.connect("clicked", lambda b: self.refresh_installed_list())
+        hbox_top.append(self.btn_refresh_installed)
         self.installed_page.append(hbox_top)
         
         # Scrollable container
@@ -612,7 +931,7 @@ class AppInstallerWindow(Adw.ApplicationWindow):
                     'version': version,
                     'source': 'AUR' if is_aur else 'Pacman',
                     'repo': 'installed',
-                    'description': '系統社群軟體包 (AUR Explicit)' if is_aur else '系統官方軟體包 (Pacman Explicit)'
+                    'description': self.tr('desc_aur') if is_aur else self.tr('desc_pacman')
                 })
                 
         # Get flatpaks
@@ -624,7 +943,7 @@ class AppInstallerWindow(Adw.ApplicationWindow):
                 'version': version,
                 'source': 'Flatpak',
                 'repo': 'installed',
-                'description': f'Flatpak 沙盒應用程式 ({app_id})'
+                'description': self.tr('desc_flatpak').format(app_id=app_id)
             })
             
         # Sort alphabetically
@@ -641,7 +960,7 @@ class AppInstallerWindow(Adw.ApplicationWindow):
             
         if not packages:
             row = Gtk.ListBoxRow()
-            lbl = Gtk.Label(label="目前無已安裝的套件。")
+            lbl = Gtk.Label(label=self.tr('no_installed_packages'))
             lbl.set_margin_top(20)
             lbl.set_margin_bottom(20)
             row.set_child(lbl)
@@ -708,20 +1027,20 @@ class AppInstallerWindow(Adw.ApplicationWindow):
         # Title and action bar
         hbox_top = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=12)
         
-        lbl_title = Gtk.Label()
-        lbl_title.set_markup("<span size='large' weight='bold'>系統更新與升級</span>")
-        lbl_title.set_hexpand(True)
-        lbl_title.set_halign(Gtk.Align.START)
-        hbox_top.append(lbl_title)
+        self.updates_title = Gtk.Label()
+        self.updates_title.set_markup("<span size='large' weight='bold'>系統更新與升級</span>")
+        self.updates_title.set_hexpand(True)
+        self.updates_title.set_halign(Gtk.Align.START)
+        hbox_top.append(self.updates_title)
         
         self.btn_update_all = Gtk.Button(label="⚡ 全部更新")
         self.btn_update_all.add_css_class("suggested-action")
         self.btn_update_all.connect("clicked", lambda b: self.start_system_upgrade())
         hbox_top.append(self.btn_update_all)
         
-        btn_check = Gtk.Button(label="🔄 檢查更新")
-        btn_check.connect("clicked", lambda b: self.refresh_updates_list())
-        hbox_top.append(btn_check)
+        self.btn_check_updates = Gtk.Button(label="🔄 檢查更新")
+        self.btn_check_updates.connect("clicked", lambda b: self.refresh_updates_list())
+        hbox_top.append(self.btn_check_updates)
         self.updates_page.append(hbox_top)
         
         # Scroll Window
@@ -833,7 +1152,7 @@ class AppInstallerWindow(Adw.ApplicationWindow):
             
         if not updates:
             row = Gtk.ListBoxRow()
-            lbl = Gtk.Label(label="所有軟體皆為最新，無須更新！")
+            lbl = Gtk.Label(label=self.tr('system_up_to_date'))
             lbl.set_margin_top(20)
             lbl.set_margin_bottom(20)
             row.set_child(lbl)
@@ -869,13 +1188,13 @@ class AppInstallerWindow(Adw.ApplicationWindow):
             title_box.append(badge)
             vbox.append(title_box)
             
-            desc_lbl = Gtk.Label(label=f"待更新: {upg['old_version']} ➔ {upg['new_version']}")
+            desc_lbl = Gtk.Label(label=self.tr('update_detail').format(old=upg['old_version'], new=upg['new_version']))
             desc_lbl.set_halign(Gtk.Align.START)
             desc_lbl.add_css_class("dim-label")
             vbox.append(desc_lbl)
             hbox.append(vbox)
             
-            btn_upgrade = Gtk.Button(label="升級")
+            btn_upgrade = Gtk.Button(label=self.tr('btn_upgrade_single'))
             btn_upgrade.add_css_class("suggested-action")
             btn_upgrade.set_valign(Gtk.Align.CENTER)
             btn_upgrade.connect("clicked", lambda b, u=upg: self.start_single_upgrade(u))
@@ -982,17 +1301,17 @@ class AppInstallerWindow(Adw.ApplicationWindow):
         
         if pkg['installed']:
             if pkg.get('has_update'):
-                inst_lbl = Gtk.Label(label=f"▲ 有更新 (本機: {pkg.get('installed_version', '')})")
+                inst_lbl = Gtk.Label(label=self.tr('label_has_update').format(version=pkg.get('installed_version', '')))
                 inst_lbl.add_css_class("warning-label")
             else:
-                inst_lbl = Gtk.Label(label="✓ 已安裝")
+                inst_lbl = Gtk.Label(label=self.tr('label_installed'))
                 inst_lbl.add_css_class("success-label")
             title_box.append(inst_lbl)
             
         vbox_info.append(title_box)
         
         # Description
-        desc_text = pkg['description'] or "無詳細描述。"
+        desc_text = pkg['description'] or self.tr('no_description')
         desc_lbl = Gtk.Label(label=desc_text)
         desc_lbl.set_wrap(True)
         desc_lbl.set_max_width_chars(65)
@@ -1001,7 +1320,7 @@ class AppInstallerWindow(Adw.ApplicationWindow):
         vbox_info.append(desc_lbl)
         
         # Version and Repo details
-        details = f"版本: {pkg['version']} | 庫區: {pkg['repo']}"
+        details = self.tr('pkg_details').format(version=pkg['version'], repo=pkg['repo'])
         details_lbl = Gtk.Label(label=details)
         details_lbl.set_halign(Gtk.Align.START)
         details_lbl.add_css_class("small-label")
@@ -1013,13 +1332,13 @@ class AppInstallerWindow(Adw.ApplicationWindow):
         btn_action = Gtk.Button()
         if pkg['installed']:
             if pkg.get('has_update'):
-                btn_action.set_label("更新")
+                btn_action.set_label(self.tr('btn_update_pkg'))
                 btn_action.add_css_class("suggested-action")
             else:
-                btn_action.set_label("重新安裝")
+                btn_action.set_label(self.tr('btn_reinstall_pkg'))
                 btn_action.add_css_class("flat")
         else:
-            btn_action.set_label("安裝")
+            btn_action.set_label(self.tr('btn_install_pkg'))
             btn_action.add_css_class("suggested-action")
             
         btn_action.set_valign(Gtk.Align.CENTER)
