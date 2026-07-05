@@ -1,3 +1,8 @@
+import sys
+import os
+import threading
+import subprocess
+import re
 import json
 import gi
 
