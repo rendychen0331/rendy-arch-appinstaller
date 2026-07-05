@@ -52,6 +52,7 @@ TRANSLATIONS = {
         'filter_pacman': '官方倉庫 (Pacman)',
         'filter_aur': '使用者倉庫 (AUR)',
         'filter_flatpak': '沙盒套件 (Flatpak)',
+        'filter_npm': 'Node 套件 (npm)',
         'search_intro': '輸入關鍵字，探索您的系統應用',
         'search_loading': '正在搜尋 \'{query}\'，請稍候...',
         'installed_title': '已安裝的軟體',
@@ -117,6 +118,7 @@ TRANSLATIONS = {
         'filter_pacman': '官方仓库 (Pacman)',
         'filter_aur': '使用者仓库 (AUR)',
         'filter_flatpak': '沙盒套件 (Flatpak)',
+        'filter_npm': 'Node 套件 (npm)',
         'search_intro': '输入关键字，探索您的系统应用',
         'search_loading': '正在搜寻 \'{query}\'，请稍候...',
         'installed_title': '已安装的软件',
@@ -182,6 +184,7 @@ TRANSLATIONS = {
         'filter_pacman': 'Official Repo (Pacman)',
         'filter_aur': 'User Repo (AUR)',
         'filter_flatpak': 'Sandbox (Flatpak)',
+        'filter_npm': 'Node Packages (npm)',
         'search_intro': 'Enter keywords to discover system applications',
         'search_loading': 'Searching for \'{query}\', please wait...',
         'installed_title': 'Installed Applications',
@@ -381,6 +384,10 @@ class AppInstallerWindow(Adw.ApplicationWindow):
             }
             .badge-flatpak {
                 background-color: #9141ac;
+                color: white;
+            }
+            .badge-npm {
+                background-color: #cb3837;
                 color: white;
             }
             .success-label {
@@ -624,6 +631,7 @@ class AppInstallerWindow(Adw.ApplicationWindow):
         self.filter_pacman.set_label(self.tr('filter_pacman'))
         self.filter_aur.set_label(self.tr('filter_aur'))
         self.filter_flatpak.set_label(self.tr('filter_flatpak'))
+        self.filter_npm.set_label(self.tr('filter_npm'))
         if not self.results_scroll.get_visible():
             self.search_status_label.set_text(self.tr('search_intro'))
             
@@ -810,10 +818,13 @@ class AppInstallerWindow(Adw.ApplicationWindow):
         self.filter_aur.set_active(True)
         self.filter_flatpak = Gtk.CheckButton(label="沙盒套件 (Flatpak)")
         self.filter_flatpak.set_active(False)
+        self.filter_npm = Gtk.CheckButton(label="Node 套件 (npm)")
+        self.filter_npm.set_active(False)
         
         filter_hbox.append(self.filter_pacman)
         filter_hbox.append(self.filter_aur)
         filter_hbox.append(self.filter_flatpak)
+        filter_hbox.append(self.filter_npm)
         search_panel.append(filter_hbox)
         
         self.search_page.append(search_panel)
@@ -1091,6 +1102,21 @@ class AppInstallerWindow(Adw.ApplicationWindow):
                         updates.append(parts[0])
         except Exception:
             pass
+            
+        try:
+            res_npm = subprocess.run(
+                ['npm', 'outdated', '-g', '--json'],
+                stdout=subprocess.PIPE,
+                stderr=subprocess.PIPE,
+                text=True,
+                check=False
+            )
+            if res_npm.stdout.strip():
+                data = json.loads(res_npm.stdout)
+                updates.extend(list(data.keys()))
+        except Exception:
+            pass
+            
         GLib.idle_add(self.update_sidebar_badge, len(updates))
 
     def update_sidebar_badge(self, count):
@@ -1134,6 +1160,26 @@ class AppInstallerWindow(Adw.ApplicationWindow):
                         })
         except Exception as e:
             print(f"Error checking native updates: {e}")
+            
+        try:
+            res_npm = subprocess.run(
+                ['npm', 'outdated', '-g', '--json'],
+                stdout=subprocess.PIPE,
+                stderr=subprocess.PIPE,
+                text=True,
+                check=False
+            )
+            if res_npm.stdout.strip():
+                data = json.loads(res_npm.stdout)
+                for name, info in data.items():
+                    updates.append({
+                        'name': name,
+                        'old_version': info.get('current', ''),
+                        'new_version': info.get('latest', ''),
+                        'source': 'npm'
+                    })
+        except Exception as e:
+            print(f"Error checking npm updates: {e}")
             
         GLib.idle_add(self.show_updates, updates)
         
@@ -1195,8 +1241,12 @@ class AppInstallerWindow(Adw.ApplicationWindow):
             badge.add_css_class("badge-label")
             if upg['source'] == 'Pacman':
                 badge.add_css_class("badge-pacman")
-            else:
+            elif upg['source'] == 'AUR':
                 badge.add_css_class("badge-aur")
+            elif upg['source'] == 'Flatpak':
+                badge.add_css_class("badge-flatpak")
+            elif upg['source'] == 'npm':
+                badge.add_css_class("badge-npm")
             title_box.append(badge)
             vbox.append(title_box)
             
@@ -1309,6 +1359,8 @@ class AppInstallerWindow(Adw.ApplicationWindow):
             badge_lbl.add_css_class("badge-aur")
         elif pkg['source'] == 'Flatpak':
             badge_lbl.add_css_class("badge-flatpak")
+        elif pkg['source'] == 'npm':
+            badge_lbl.add_css_class("badge-npm")
         title_box.append(badge_lbl)
         
         if pkg['installed']:
@@ -1381,8 +1433,9 @@ class AppInstallerWindow(Adw.ApplicationWindow):
             show_pacman = self.filter_pacman.get_active()
             show_aur = self.filter_aur.get_active()
             show_flatpak = self.filter_flatpak.get_active()
+            show_npm = self.filter_npm.get_active()
             
-            results = search_all(query)
+            results = search_all(query, show_pacman, show_aur, show_flatpak, show_npm)
             
             filtered = []
             for r in results:
@@ -1391,6 +1444,8 @@ class AppInstallerWindow(Adw.ApplicationWindow):
                 if r['source'] == 'AUR' and not show_aur:
                     continue
                 if r['source'] == 'Flatpak' and not show_flatpak:
+                    continue
+                if r['source'] == 'npm' and not show_npm:
                     continue
                 filtered.append(r)
                 
@@ -1591,6 +1646,8 @@ class AppInstallerWindow(Adw.ApplicationWindow):
             cmd = ["yay", "-S", "--noconfirm", pkg['name']]
         elif pkg['source'] == 'Flatpak':
             cmd = ["flatpak", "install", "-y", "flathub", pkg['app_id']]
+        elif pkg['source'] == 'npm':
+            cmd = ["sudo", "-A", "npm", "install", "-g", pkg['name']]
             
         thread = threading.Thread(
             target=self.run_install_thread, 
@@ -1615,6 +1672,8 @@ class AppInstallerWindow(Adw.ApplicationWindow):
         
         if pkg['source'] == 'Flatpak':
             cmd = ["flatpak", "uninstall", "-y", pkg['app_id']]
+        elif pkg['source'] == 'npm':
+            cmd = ["sudo", "-A", "npm", "uninstall", "-g", pkg['name']]
         else:
             cmd = ["pkexec", "pacman", "-Rns", "--noconfirm", pkg['name']]
             
@@ -1639,6 +1698,8 @@ class AppInstallerWindow(Adw.ApplicationWindow):
         
         if upg['source'] == 'Pacman':
             cmd = ["pkexec", "pacman", "-S", "--noconfirm", upg['name']]
+        elif upg['source'] == 'npm':
+            cmd = ["sudo", "-A", "npm", "install", "-g", upg['name']]
         else:
             cmd = ["yay", "-S", "--noconfirm", upg['name']]
             
@@ -1694,8 +1755,16 @@ class AppInstallerWindow(Adw.ApplicationWindow):
         env = os.environ.copy()
         env["SUDO_ASKPASS"] = askpass_path
         
-        # Pre-authenticate sudo for yay/AUR commands to prevent password prompts mid-build
-        if cmd[0] == "yay":
+        # Safety Check: Verify that the tool executable is installed
+        import shutil
+        tool_exec = cmd[2] if cmd[0] == "sudo" else (cmd[1] if cmd[0] == "pkexec" else cmd[0])
+        if not shutil.which(tool_exec):
+            self.append_terminal_line(f"[-] 錯誤：系統找不到可執行檔 '{tool_exec}'。\n")
+            self.append_terminal_line(f"[-] 請先手動安裝它！例如使用 Pacman 安裝：sudo pacman -S {tool_exec}\n")
+            return False
+        
+        # Pre-authenticate sudo for yay/AUR and sudo commands to prevent password prompts mid-build
+        if cmd[0] == "yay" or cmd[0] == "sudo":
             self.update_status_idle("正在驗證管理員權限...")
             self.append_terminal_line("[*] 正在驗證管理員授權以利後續自動安裝...\n")
             pre_auth_res = subprocess.run(

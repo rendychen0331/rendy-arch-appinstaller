@@ -253,14 +253,79 @@ def search_flatpak_packages(query):
             })
     return packages
 
+# --- NPM SEARCH HELPERS ---
+
+def get_installed_npm_packages_dict():
+    installed = {}
+    try:
+        res = subprocess.run(
+            ['npm', 'list', '-g', '--depth=0', '--json'],
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+            text=True,
+            check=False
+        )
+        if res.returncode == 0:
+            data = json.loads(res.stdout)
+            dependencies = data.get('dependencies', {})
+            for name, info in dependencies.items():
+                installed[name] = info.get('version', '')
+    except Exception:
+        pass
+    return installed
+
+def search_npm_packages(query, installed_npm_dict):
+    if not query.strip():
+        return []
+    try:
+        url = f"https://registry.npmjs.org/-/v1/search?text={urllib.parse.quote(query)}&size=30"
+        req = urllib.request.Request(url, headers={'User-Agent': 'Mozilla/5.0 (ArchAppInstaller)'})
+        with urllib.request.urlopen(req, timeout=4) as response:
+            data = json.loads(response.read().decode())
+            results = []
+            for item in data.get('objects', []):
+                pkg = item.get('package', {})
+                name = pkg.get('name')
+                if not name:
+                    continue
+                version = pkg.get('version', '')
+                desc = pkg.get('description', '')
+                
+                # Check if installed
+                installed_ver = installed_npm_dict.get(name)
+                is_installed = installed_ver is not None
+                
+                # Check for update
+                has_update = False
+                if is_installed and version and installed_ver != version:
+                    has_update = True
+                
+                results.append({
+                    'name': name,
+                    'app_id': name,
+                    'version': version,
+                    'source': 'npm',
+                    'repo': 'npm Registry',
+                    'description': desc,
+                    'installed': is_installed,
+                    'installed_version': installed_ver or '',
+                    'has_update': has_update,
+                    'popularity': item.get('score', {}).get('detail', {}).get('popularity', 0.0)
+                })
+            return results
+    except Exception as e:
+        print(f"Error searching npm packages: {e}")
+    return []
+
 # --- UNIFIED SEARCH PIPELINE ---
 
-def search_all(query):
+def search_all(query, include_pacman=True, include_aur=True, include_flatpak=True, include_npm=True):
     if not query.strip():
         return []
     
     # 1. Fetch local installed package list with versions once
-    installed_dict = get_installed_pacman_packages_dict()
+    installed_dict = get_installed_pacman_packages_dict() if (include_pacman or include_aur) else {}
+    installed_npm_dict = get_installed_npm_packages_dict() if include_npm else {}
     
     # Generate query variations to handle spaces (e.g., "google chrome" -> ["google chrome", "google-chrome"])
     queries = [query]
@@ -270,18 +335,21 @@ def search_all(query):
         
     combined_arch = []
     
-    for q_item in queries:
-        arch_pkgs = search_official_packages_api(q_item, installed_dict)
-        aur_pkgs = None
-        if arch_pkgs is not None:
-            aur_pkgs = search_aur_packages_api(q_item, installed_dict)
-            
-        if arch_pkgs is None or aur_pkgs is None:
-            # Fallback to local
-            arch_pkgs = search_arch_packages_local(q_item, installed_dict)
+    if include_pacman or include_aur:
+        for q_item in queries:
+            arch_pkgs = []
+            if include_pacman:
+                arch_pkgs = search_official_packages_api(q_item, installed_dict)
             aur_pkgs = []
-            
-        combined_arch.extend(arch_pkgs + aur_pkgs)
+            if include_aur and arch_pkgs is not None:
+                aur_pkgs = search_aur_packages_api(q_item, installed_dict)
+                
+            if (include_pacman and arch_pkgs is None) or (include_aur and aur_pkgs is None):
+                # Fallback to local
+                arch_pkgs = search_arch_packages_local(q_item, installed_dict) if include_pacman else []
+                aur_pkgs = []
+                
+            combined_arch.extend((arch_pkgs or []) + (aur_pkgs or []))
         
     # De-duplicate by name and source
     seen = set()
@@ -292,12 +360,19 @@ def search_all(query):
             seen.add(key)
             unique_arch.append(pkg)
 
-    # 5. Fetch Flatpaks (local cache search is extremely fast)
-    flatpak_pkgs = search_flatpak_packages(query)
+    # 5. Fetch Flatpaks
+    flatpak_pkgs = []
+    if include_flatpak:
+        flatpak_pkgs = search_flatpak_packages(query)
+        
+    # 6. Fetch npm packages
+    npm_pkgs = []
+    if include_npm:
+        npm_pkgs = search_npm_packages(query, installed_npm_dict)
     
-    combined = unique_arch + flatpak_pkgs
+    combined = unique_arch + flatpak_pkgs + npm_pkgs
     
-    # 6. Sort by match score and installed status to keep GUI rendering smooth
+    # 7. Sort by match score and installed status to keep GUI rendering smooth
     q = query.lower()
     
     def match_score(pkg):
@@ -333,7 +408,7 @@ def search_all(query):
         if q in id_words:
             return 4
             
-        # 6. Word-boundary match in description (e.g. 'vscode' in description of 'visual-studio-code-bin')
+        # 6. Word-boundary match in description
         desc_words = re.split(r'[\-_\.\s\(\):]+', desc)
         if q in desc_words:
             return 5
@@ -357,20 +432,16 @@ def search_all(query):
         # 11. Description match only
         return 10
 
-    # Sort: 
-    # 1. Prioritize installed packages if they match the query in name, ID, or description words (score < 8)
-    # 2. Match score (lower is more relevant)
-    # 3. Popularity (descending)
-    # 4. Source priority: Pacman (0) ➔ AUR (1) ➔ Flatpak (2)
-    # 5. Name length (shorter first)
     def source_priority(pkg):
         src = pkg['source']
         if src == 'Pacman':
             return 0
         elif src == 'AUR':
             return 1
-        else:
+        elif src == 'Flatpak':
             return 2
+        else:
+            return 3
 
     combined.sort(key=lambda x: (
         0 if (x['installed'] and match_score(x) < 8) else 1,
@@ -380,7 +451,6 @@ def search_all(query):
         len(x['name'])
     ))
     
-    # Limit to top 80 results for instant rendering
     return combined[:80]
 
 if __name__ == "__main__":
