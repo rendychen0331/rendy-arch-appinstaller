@@ -407,7 +407,8 @@ def search_all(query, include_pacman=True, include_aur=True, include_flatpak=Tru
         src_map = {
             'Pacman': 'official',
             'AUR': 'aur',
-            'Flatpak': 'flatpak'
+            'Flatpak': 'flatpak',
+            'npm': 'npm'
         }
         pkg_src = src_map.get(pkg.get('source'), '').lower()
         query_clean = q.strip()
