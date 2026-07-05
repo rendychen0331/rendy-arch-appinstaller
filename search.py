@@ -395,7 +395,7 @@ def search_all(query, include_pacman=True, include_aur=True, include_flatpak=Tru
             return 1
             
         # 3. Word-boundary match in package name
-        name_words = re.split(r'[\-_\.\s]+', name)
+        name_words = re.split(r'[\-_\.\s/@]+', name)
         if q in name_words or (is_vscode_query and (name == 'code' or 'visual studio code' in norm_name)) or (is_chrome_query and name == 'google-chrome-beta'):
             return 2
             
@@ -404,7 +404,7 @@ def search_all(query, include_pacman=True, include_aur=True, include_flatpak=Tru
             return 3
             
         # 5. Word-boundary match in app ID
-        id_words = re.split(r'[\-_\.\s]+', app_id)
+        id_words = re.split(r'[\-_\.\s/@]+', app_id)
         if q in id_words:
             return 4
             
