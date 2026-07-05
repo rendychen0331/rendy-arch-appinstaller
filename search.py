@@ -416,7 +416,7 @@ def search_all(query, include_pacman=True, include_aur=True, include_flatpak=Tru
         for target_pkg, target_src in matched_targets:
             if target_pkg == name:
                 if target_src.lower() == pkg_src or (target_src.lower() == 'official-multilib' and pkg_src == 'official'):
-                    return 0
+                    return -1 # Curated alias matches get absolute highest priority!
         
         # 1. Exact name match
         if name == q:
