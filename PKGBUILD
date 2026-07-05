@@ -10,9 +10,11 @@ depends=('python' 'python-gobject' 'gtk4' 'libadwaita' 'yay' 'flatpak')
 source=('main.py'
         'search.py'
         'askpass.py'
+        'app-aliases.json'
         'rendy-arch-appinstaller'
         'org.rendy.arch.appinstaller.desktop')
 sha256sums=('SKIP'
+            'SKIP'
             'SKIP'
             'SKIP'
             'SKIP'
@@ -24,6 +26,7 @@ package() {
     install -m755 "${srcdir}/main.py" "${pkgdir}/usr/share/${pkgname}/main.py"
     install -m644 "${srcdir}/search.py" "${pkgdir}/usr/share/${pkgname}/search.py"
     install -m755 "${srcdir}/askpass.py" "${pkgdir}/usr/share/${pkgname}/askpass.py"
+    install -m644 "${srcdir}/app-aliases.json" "${pkgdir}/usr/share/${pkgname}/app-aliases.json"
 
     # 2. 安裝命令列封裝器到 /usr/bin/
     install -d "${pkgdir}/usr/bin"

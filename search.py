@@ -3,6 +3,29 @@ import re
 import urllib.request
 import urllib.parse
 import json
+import os
+
+# Load app aliases if available
+ALIASES_MAP = {} # maps alias -> list of (package_name, source)
+try:
+    base_dir = os.path.dirname(os.path.abspath(__file__))
+    aliases_path = os.path.join(base_dir, "app-aliases.json")
+    if os.path.exists(aliases_path):
+        with open(aliases_path, 'r', encoding='utf-8') as f:
+            aliases_data = json.load(f)
+            for app in aliases_data.get("apps", []):
+                pkg_name = app.get("package")
+                src = app.get("source") # official | aur | flatpak
+                aliases = app.get("aliases", [])
+                for alias in aliases:
+                    alias_clean = alias.strip().lower()
+                    if alias_clean:
+                        if alias_clean not in ALIASES_MAP:
+                            ALIASES_MAP[alias_clean] = []
+                        ALIASES_MAP[alias_clean].append((pkg_name, src))
+except Exception as e:
+    print(f"Error loading app-aliases.json: {e}")
+
 
 def get_installed_pacman_packages_dict():
     try:
@@ -380,23 +403,31 @@ def search_all(query, include_pacman=True, include_aur=True, include_flatpak=Tru
         app_id = (pkg.get('app_id') or '').lower()
         desc = (pkg.get('description') or '').lower()
         
-        # Smart VS Code & Chrome alias matching
-        is_vscode_query = q in ('vscode', 'vs-code', 'vsc')
-        is_chrome_query = q in ('google chrome', 'google-chrome', 'chrome')
-        norm_name = name.replace('-', ' ').replace('_', ' ')
-        norm_id = app_id.replace('-', ' ').replace('_', ' ')
+        # Check app-aliases.json
+        src_map = {
+            'Pacman': 'official',
+            'AUR': 'aur',
+            'Flatpak': 'flatpak'
+        }
+        pkg_src = src_map.get(pkg.get('source'), '').lower()
+        query_clean = q.strip()
+        matched_targets = ALIASES_MAP.get(query_clean, [])
+        for target_pkg, target_src in matched_targets:
+            if target_pkg == name:
+                if target_src.lower() == pkg_src or (target_src.lower() == 'official-multilib' and pkg_src == 'official'):
+                    return 0
         
         # 1. Exact name match
-        if name == q or (is_vscode_query and (name == 'visual-studio-code' or norm_name == 'visual studio code')) or (is_chrome_query and name == 'google-chrome'):
+        if name == q:
             return 0
             
         # 2. Exact ID match
-        if app_id == q or (is_chrome_query and (app_id == 'com.google.chrome' or norm_id == 'com google chrome')):
+        if app_id == q:
             return 1
             
         # 3. Word-boundary match in package name
         name_words = re.split(r'[\-_\.\s/@]+', name)
-        if q in name_words or (is_vscode_query and (name == 'code' or 'visual studio code' in norm_name)) or (is_chrome_query and name == 'google-chrome-beta'):
+        if q in name_words:
             return 2
             
         # 4. Package name starts with query
