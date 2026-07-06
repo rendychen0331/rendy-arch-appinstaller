@@ -184,6 +184,9 @@
     { "package": "npx", "source": "npm", "aliases": ["node package execute"] },
     { "package": "webpack", "source": "npm", "aliases": ["webpack bundler"] },
     { "package": "webpack-cli", "source": "npm", "aliases": ["webpack command line"] },
-    { "package": "@openai/codex", "source": "npm", "aliases": ["codex", "openai codex", "codex cli"] }
+    { "package": "@openai/codex", "source": "npm", "aliases": ["codex", "openai codex", "codex cli"] },
+    { "package": "openai-codex", "source": "official", "aliases": ["codex", "openai codex", "codex cli"] },
+    { "package": "openai-codex-bin", "source": "aur", "aliases": ["codex", "openai codex", "codex cli"] },
+    { "package": "openai-codex-desktop", "source": "aur", "aliases": ["codex", "openai codex", "codex cli", "codex desktop"] }
   ]
 }
