@@ -468,7 +468,7 @@ def search_all(query, include_pacman=True, include_aur=True, include_flatpak=Tru
         src = pkg['source']
         if src == 'Pacman':
             return 0
-        elif src == 'AUR':
+        elif src == 'npm':
             return 1
         elif src == 'Flatpak':
             return 2
@@ -478,8 +478,8 @@ def search_all(query, include_pacman=True, include_aur=True, include_flatpak=Tru
     combined.sort(key=lambda x: (
         0 if (x['installed'] and match_score(x) < 8) else 1,
         match_score(x),
-        -x.get('popularity', 0.0),
         source_priority(x),
+        -x.get('popularity', 0.0),
         len(x['name'])
     ))
     
