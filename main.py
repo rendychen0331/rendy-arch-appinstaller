@@ -819,7 +819,7 @@ class AppInstallerWindow(Adw.ApplicationWindow):
         self.filter_flatpak = Gtk.CheckButton(label="沙盒套件 (Flatpak)")
         self.filter_flatpak.set_active(False)
         self.filter_npm = Gtk.CheckButton(label="Node 套件 (npm)")
-        self.filter_npm.set_active(False)
+        self.filter_npm.set_active(True)
         
         filter_hbox.append(self.filter_pacman)
         filter_hbox.append(self.filter_aur)
