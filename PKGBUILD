@@ -4,16 +4,19 @@ pkgver=1.0.0
 pkgrel=1
 pkgdesc="基於 GTK 4 + Libadwaita 的視覺化套件安裝器與已安裝軟體管理器，支援 Pacman、AUR 及 Flatpak"
 arch=('any')
-url="https://github.com/rendy/arch-app-installer"
+url="https://github.com/rendychen0331/rendy-arch-appinstaller"
 license=('GPL3')
 depends=('python' 'python-gobject' 'gtk4' 'libadwaita' 'yay' 'flatpak')
+optdepends=('npm: install and manage global npm packages')
 source=('main.py'
         'search.py'
         'askpass.py'
+        'logger_setup.py'
         'app-aliases.json'
         'rendy-arch-appinstaller'
         'org.rendy.arch.appinstaller.desktop')
 sha256sums=('SKIP'
+            'SKIP'
             'SKIP'
             'SKIP'
             'SKIP'
@@ -26,6 +29,7 @@ package() {
     install -m755 "${srcdir}/main.py" "${pkgdir}/usr/share/${pkgname}/main.py"
     install -m644 "${srcdir}/search.py" "${pkgdir}/usr/share/${pkgname}/search.py"
     install -m755 "${srcdir}/askpass.py" "${pkgdir}/usr/share/${pkgname}/askpass.py"
+    install -m644 "${srcdir}/logger_setup.py" "${pkgdir}/usr/share/${pkgname}/logger_setup.py"
     install -m644 "${srcdir}/app-aliases.json" "${pkgdir}/usr/share/${pkgname}/app-aliases.json"
 
     # 2. 安裝命令列封裝器到 /usr/bin/

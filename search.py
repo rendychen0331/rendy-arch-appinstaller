@@ -3,7 +3,10 @@ import re
 import urllib.request
 import urllib.parse
 import json
+import logging
 import os
+
+logger = logging.getLogger(__name__)
 
 # Load app aliases if available
 ALIASES_MAP = {} # maps alias -> list of (package_name, source)
@@ -23,8 +26,8 @@ try:
                         if alias_clean not in ALIASES_MAP:
                             ALIASES_MAP[alias_clean] = []
                         ALIASES_MAP[alias_clean].append((pkg_name, src))
-except Exception as e:
-    print(f"Error loading app-aliases.json: {e}")
+except Exception:
+    logger.exception("Error loading app-aliases.json")
 
 
 def get_installed_pacman_packages_dict():
@@ -113,8 +116,8 @@ def search_official_packages_api(query, installed_dict):
                     'popularity': 1000.0
                 })
             return packages
-    except Exception as e:
-        print(f"Official API search failed: {e}")
+    except Exception:
+        logger.warning("Official API search failed for %r", query, exc_info=True)
         return None
 
 def search_aur_packages_api(query, installed_dict):
@@ -149,8 +152,8 @@ def search_aur_packages_api(query, installed_dict):
                     'popularity': float(item.get('Popularity', 0.0))
                 })
             return packages
-    except Exception as e:
-        print(f"AUR API search failed: {e}")
+    except Exception:
+        logger.warning("AUR API search failed for %r", query, exc_info=True)
         return None
 
 # --- LOCAL COMMAND FALLBACK IMPLEMENTATION ---
@@ -165,8 +168,8 @@ def search_arch_packages_local(query, installed_dict):
             check=False
         )
         lines = result.stdout.split('\n')
-    except Exception as e:
-        print(f"Error running local yay: {e}")
+    except Exception:
+        logger.exception("Error running local yay")
         return []
 
     packages = []
@@ -241,8 +244,8 @@ def search_flatpak_packages(query):
         if result.returncode != 0:
             return []
         lines = result.stdout.split('\n')
-    except Exception as e:
-        print(f"Error running flatpak: {e}")
+    except Exception:
+        logger.exception("Error running flatpak")
         return []
 
     installed_dict = get_installed_flatpaks_dict()
@@ -336,8 +339,8 @@ def search_npm_packages(query, installed_npm_dict):
                     'popularity': item.get('score', {}).get('detail', {}).get('popularity', 0.0)
                 })
             return results
-    except Exception as e:
-        print(f"Error searching npm packages: {e}")
+    except Exception:
+        logger.warning("Error searching npm packages for %r", query, exc_info=True)
     return []
 
 # --- UNIFIED SEARCH PIPELINE ---
@@ -360,19 +363,20 @@ def search_all(query, include_pacman=True, include_aur=True, include_flatpak=Tru
     
     if include_pacman or include_aur:
         for q_item in queries:
-            arch_pkgs = []
-            if include_pacman:
-                arch_pkgs = search_official_packages_api(q_item, installed_dict)
-            aur_pkgs = []
-            if include_aur and arch_pkgs is not None:
-                aur_pkgs = search_aur_packages_api(q_item, installed_dict)
-                
-            if (include_pacman and arch_pkgs is None) or (include_aur and aur_pkgs is None):
-                # Fallback to local
-                arch_pkgs = search_arch_packages_local(q_item, installed_dict) if include_pacman else []
-                aur_pkgs = []
-                
-            combined_arch.extend((arch_pkgs or []) + (aur_pkgs or []))
+            arch_pkgs = search_official_packages_api(q_item, installed_dict) if include_pacman else []
+            aur_pkgs = search_aur_packages_api(q_item, installed_dict) if include_aur else []
+
+            # A disabled source yields [], so None here means only "that API call failed".
+            if arch_pkgs is None or aur_pkgs is None:
+                # `yay -Ss` indexes the official repos and the AUR together, so one
+                # local run can back-fill whichever leg lost its API.
+                local_pkgs = search_arch_packages_local(q_item, installed_dict)
+                if arch_pkgs is None:
+                    arch_pkgs = [p for p in local_pkgs if p['source'] == 'Pacman']
+                if aur_pkgs is None:
+                    aur_pkgs = [p for p in local_pkgs if p['source'] == 'AUR']
+
+            combined_arch.extend(arch_pkgs + aur_pkgs)
         
     # De-duplicate by name and source
     seen = set()
@@ -475,15 +479,18 @@ def search_all(query, include_pacman=True, include_aur=True, include_flatpak=Tru
         else:
             return 3
 
-    combined.sort(key=lambda x: (
-        0 if (x['installed'] and match_score(x) < 8) else 1,
-        match_score(x),
-        source_priority(x),
-        -x.get('popularity', 0.0),
-        len(x['name'])
+    # Score once per package: match_score re-splits names with regex, and sort()
+    # would otherwise call it on every comparison.
+    scored = [(match_score(pkg), pkg) for pkg in combined]
+    scored.sort(key=lambda item: (
+        0 if (item[1]['installed'] and item[0] < 8) else 1,
+        item[0],
+        source_priority(item[1]),
+        -item[1].get('popularity', 0.0),
+        len(item[1]['name'])
     ))
-    
-    return combined[:80]
+
+    return [pkg for _, pkg in scored[:80]]
 
 if __name__ == "__main__":
     import sys

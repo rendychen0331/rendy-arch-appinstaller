@@ -1,5 +1,8 @@
 import sys
 import os
+import logging
+import selectors
+import shutil
 import threading
 import subprocess
 import re
@@ -12,6 +15,9 @@ from gi.repository import Gtk, Gdk, GLib, Gio, Adw
 
 # Import search functions
 from search import search_all, is_flatpak_installed
+from logger_setup import setup_logging, task_scope
+
+logger = logging.getLogger(__name__)
 
 # --- INTERNATIONALIZATION (i18n) CONFIGURATION ---
 CONFIG_DIR = os.path.expanduser("~/.config/rendy-arch-appinstaller")
@@ -20,19 +26,53 @@ CONFIG_FILE = os.path.join(CONFIG_DIR, "config.json")
 def load_config():
     try:
         if os.path.exists(CONFIG_FILE):
-            with open(CONFIG_FILE, 'r') as f:
+            with open(CONFIG_FILE, 'r', encoding='utf-8') as f:
                 return json.load(f)
     except Exception:
-        pass
+        logger.warning("Config %s unreadable, falling back to defaults", CONFIG_FILE, exc_info=True)
     return {}
 
 def save_config(config):
     try:
         os.makedirs(CONFIG_DIR, exist_ok=True)
-        with open(CONFIG_FILE, 'w') as f:
+        # Write-then-rename: a crash mid-write must not leave a torn config behind.
+        tmp_path = f"{CONFIG_FILE}.tmp"
+        with open(tmp_path, 'w', encoding='utf-8') as f:
             json.dump(config, f)
+        os.replace(tmp_path, CONFIG_FILE)
     except Exception:
-        pass
+        logger.exception("Failed to save config to %s", CONFIG_FILE)
+
+# --- PACKAGE COMMAND BUILDERS ---
+# Every install/uninstall/upgrade path routes through these, so a new source is
+# added in exactly one place and an unknown source fails loudly instead of
+# silently running the wrong package manager.
+
+def build_install_cmd(pkg):
+    """Return the argv that installs pkg, or None when its source is unsupported."""
+    source = pkg.get('source')
+    if source == 'Pacman':
+        return ["pkexec", "pacman", "-S", "--noconfirm", pkg['name']]
+    if source == 'AUR':
+        return ["yay", "-S", "--noconfirm", pkg['name']]
+    if source == 'Flatpak':
+        return ["flatpak", "install", "-y", "flathub", pkg['app_id']]
+    if source == 'npm':
+        return ["sudo", "-A", "npm", "install", "-g", pkg['name']]
+    logger.error("Cannot build install command: unknown source %r for %r", source, pkg.get('name'))
+    return None
+
+def build_uninstall_cmd(pkg):
+    """Return the argv that uninstalls pkg, or None when its source is unsupported."""
+    source = pkg.get('source')
+    if source in ('Pacman', 'AUR'):
+        return ["pkexec", "pacman", "-Rns", "--noconfirm", pkg['name']]
+    if source == 'Flatpak':
+        return ["flatpak", "uninstall", "-y", pkg['app_id']]
+    if source == 'npm':
+        return ["sudo", "-A", "npm", "uninstall", "-g", pkg['name']]
+    logger.error("Cannot build uninstall command: unknown source %r for %r", source, pkg.get('name'))
+    return None
 
 TRANSLATIONS = {
     'zh_TW': {
@@ -1450,8 +1490,9 @@ class AppInstallerWindow(Adw.ApplicationWindow):
                 filtered.append(r)
                 
             GLib.idle_add(self.on_search_completed, filtered)
-        except Exception as e:
-            print(f"Error in search thread: {e}")
+        except Exception:
+            logger.exception("Error in search thread for query %r", query)
+            GLib.idle_add(self.on_search_completed, [])
 
     def on_search_completed(self, results):
         self.search_spinner.stop()
@@ -1513,13 +1554,12 @@ class AppInstallerWindow(Adw.ApplicationWindow):
                 
         if exact_match:
             self.append_terminal_line(f"[+] 找到完全匹配的套件：{exact_match['name']} ({exact_match['source']})，直接執行安裝管道。\n")
-            if exact_match['source'] == 'Pacman':
-                cmd = ["pkexec", "pacman", "-S", "--noconfirm", exact_match['name']]
-            elif exact_match['source'] == 'AUR':
-                cmd = ["yay", "-S", "--noconfirm", exact_match['name']]
-            else:
-                cmd = ["flatpak", "install", "-y", "flathub", exact_match['app_id']]
-                
+            cmd = build_install_cmd(exact_match)
+            if cmd is None:
+                self.append_terminal_line(f"[-] 不支援的套件來源：{exact_match.get('source')}\n")
+                self.finish_installation(False, f"無法安裝 '{exact_match['name']}'：不支援的套件來源。")
+                return
+
             success = self.execute_install_command(cmd, exact_match['source'])
             if success:
                 self.finish_installation(True, f"成功安裝 '{exact_match['name']}'。")
@@ -1639,19 +1679,16 @@ class AppInstallerWindow(Adw.ApplicationWindow):
         # Switch to progress view
         self.main_stack.set_visible_child_name("install_page")
         self.should_cancel = False
-        
-        if pkg['source'] == 'Pacman':
-            cmd = ["pkexec", "pacman", "-S", "--noconfirm", pkg['name']]
-        elif pkg['source'] == 'AUR':
-            cmd = ["yay", "-S", "--noconfirm", pkg['name']]
-        elif pkg['source'] == 'Flatpak':
-            cmd = ["flatpak", "install", "-y", "flathub", pkg['app_id']]
-        elif pkg['source'] == 'npm':
-            cmd = ["sudo", "-A", "npm", "install", "-g", pkg['name']]
-            
+
+        cmd = build_install_cmd(pkg)
+        if cmd is None:
+            self.append_terminal_line(f"[-] 不支援的套件來源：{pkg.get('source')}\n")
+            self.finish_installation(False, f"無法安裝 '{pkg['name']}'：不支援的套件來源。")
+            return
+
         thread = threading.Thread(
-            target=self.run_install_thread, 
-            args=(cmd, pkg['name'], pkg['source']), 
+            target=self.run_install_thread,
+            args=(cmd, pkg['name'], pkg['source']),
             daemon=True
         )
         thread.start()
@@ -1669,14 +1706,13 @@ class AppInstallerWindow(Adw.ApplicationWindow):
         
         # Switch to progress view
         self.main_stack.set_visible_child_name("install_page")
-        
-        if pkg['source'] == 'Flatpak':
-            cmd = ["flatpak", "uninstall", "-y", pkg['app_id']]
-        elif pkg['source'] == 'npm':
-            cmd = ["sudo", "-A", "npm", "uninstall", "-g", pkg['name']]
-        else:
-            cmd = ["pkexec", "pacman", "-Rns", "--noconfirm", pkg['name']]
-            
+
+        cmd = build_uninstall_cmd(pkg)
+        if cmd is None:
+            self.append_terminal_line(f"[-] 不支援的套件來源：{pkg.get('source')}\n")
+            self.finish_installation(False, f"無法卸載 '{pkg['name']}'：不支援的套件來源。")
+            return
+
         thread = threading.Thread(
             target=self.run_uninstall_thread,
             args=(cmd, pkg['name'], pkg['source']),
@@ -1695,14 +1731,13 @@ class AppInstallerWindow(Adw.ApplicationWindow):
         self.btn_back_to_search.set_sensitive(False)
         self.main_stack.set_visible_child_name("install_page")
         self.should_cancel = False
-        
-        if upg['source'] == 'Pacman':
-            cmd = ["pkexec", "pacman", "-S", "--noconfirm", upg['name']]
-        elif upg['source'] == 'npm':
-            cmd = ["sudo", "-A", "npm", "install", "-g", upg['name']]
-        else:
-            cmd = ["yay", "-S", "--noconfirm", upg['name']]
-            
+
+        cmd = build_install_cmd(upg)
+        if cmd is None:
+            self.append_terminal_line(f"[-] 不支援的套件來源：{upg.get('source')}\n")
+            self.finish_installation(False, f"無法升級 '{upg['name']}'：不支援的套件來源。")
+            return
+
         thread = threading.Thread(
             target=self.run_install_thread,
             args=(cmd, upg['name'], upg['source']),
@@ -1732,91 +1767,148 @@ class AppInstallerWindow(Adw.ApplicationWindow):
         thread.start()
 
     def run_install_thread(self, cmd, pkg_name, source):
-        self.update_status_idle(f"正在執行 {source} 安裝指令...")
-        success = self.execute_install_command(cmd, source)
-        if success:
-            self.finish_installation(True, f"成功安裝 '{pkg_name}'。")
-        else:
-            self.finish_installation(False, f"安裝 '{pkg_name}' 失敗。")
+        with task_scope(f"install {pkg_name} ({source})"):
+            self.update_status_idle(f"正在執行 {source} 安裝指令...")
+            success = self.execute_install_command(cmd, source)
+            if success:
+                self.finish_installation(True, f"成功安裝 '{pkg_name}'。")
+            else:
+                self.finish_installation(False, f"安裝 '{pkg_name}' 失敗。")
 
     def run_uninstall_thread(self, cmd, pkg_name, source):
-        self.update_status_idle(f"正在執行 {source} 卸載指令...")
-        success = self.execute_install_command(cmd, source)
-        if success:
-            self.finish_installation(True, f"成功卸載 '{pkg_name}'。")
-        else:
-            self.finish_installation(False, f"卸載 '{pkg_name}' 失敗。")
+        with task_scope(f"uninstall {pkg_name} ({source})"):
+            self.update_status_idle(f"正在執行 {source} 卸載指令...")
+            success = self.execute_install_command(cmd, source)
+            if success:
+                self.finish_installation(True, f"成功卸載 '{pkg_name}'。")
+            else:
+                self.finish_installation(False, f"卸載 '{pkg_name}' 失敗。")
 
     def execute_install_command(self, cmd, source):
         # Configure ASKPASS for yay/AUR prompts
         script_dir = os.path.dirname(os.path.abspath(__file__))
         askpass_path = os.path.join(script_dir, "askpass.py")
-            
+
         env = os.environ.copy()
         env["SUDO_ASKPASS"] = askpass_path
-        
+
         # Safety Check: Verify that the tool executable is installed
-        import shutil
         tool_exec = cmd[2] if cmd[0] == "sudo" else (cmd[1] if cmd[0] == "pkexec" else cmd[0])
         if not shutil.which(tool_exec):
             self.append_terminal_line(f"[-] 錯誤：系統找不到可執行檔 '{tool_exec}'。\n")
             self.append_terminal_line(f"[-] 請先手動安裝它！例如使用 Pacman 安裝：sudo pacman -S {tool_exec}\n")
+            logger.error("Executable %r not found on PATH", tool_exec)
             return False
-        
-        # Pre-authenticate sudo for yay/AUR and sudo commands to prevent password prompts mid-build
+
+        # Pre-authenticate sudo for yay/AUR and sudo commands to prevent password prompts mid-build.
+        # -A is what makes sudo consult SUDO_ASKPASS; without it sudo wants a tty, which a
+        # desktop-launched GUI does not have.
         if cmd[0] == "yay" or cmd[0] == "sudo":
             self.update_status_idle("正在驗證管理員權限...")
             self.append_terminal_line("[*] 正在驗證管理員授權以利後續自動安裝...\n")
             pre_auth_res = subprocess.run(
-                ["sudo", "-v"],
+                ["sudo", "-A", "-v"],
                 env=env,
                 stdout=subprocess.PIPE,
                 stderr=subprocess.PIPE
             )
             if pre_auth_res.returncode != 0:
                 self.append_terminal_line("[-] 管理員授權失敗，取消安裝。\n")
+                logger.warning("sudo pre-authentication failed (rc=%s)", pre_auth_res.returncode)
                 return False
             self.append_terminal_line("[+] 授權成功，開始編譯與安裝。\n")
-            
+
         self.append_terminal_line(f"===> 啟動：{' '.join(cmd)}\n")
-        
+        logger.info("Running %s command: %s", source, ' '.join(cmd))
+
         try:
+            # bufsize=0 + raw pipe: os.read below must not race a buffered text wrapper.
             process = subprocess.Popen(
                 cmd,
                 stdout=subprocess.PIPE,
                 stderr=subprocess.STDOUT,
-                text=True,
-                bufsize=1,
+                bufsize=0,
                 env=env
             )
-            
+        except Exception:
+            logger.exception("Failed to launch %s", cmd)
+            self.append_terminal_line(f"執行出錯: 無法啟動 {cmd[0]}\n")
+            return False
+
+        try:
+            if self._stream_process_output(process):
+                return process.returncode == 0
+            return False
+        except Exception as exc:
+            logger.exception("Error while streaming output of %s", cmd[0])
+            self.append_terminal_line(f"執行出錯: {exc}\n")
+            self._terminate_process(process)
+            return False
+
+    def _stream_process_output(self, process):
+        """Pump the child's output into the terminal view. Returns False if cancelled.
+
+        Polls with a timeout instead of blocking in readline(), so a cancel click lands
+        during a silent stretch of an AUR build rather than waiting for the next line.
+        """
+        selector = selectors.DefaultSelector()
+        selector.register(process.stdout, selectors.EVENT_READ)
+        pending = ""
+
+        try:
             while True:
                 if self.should_cancel:
                     self.append_terminal_line("\n[!] 偵測到使用者點擊取消。正在強制中斷子程序...\n")
-                    process.terminate()
-                    process.wait()
+                    self._terminate_process(process)
                     return False
-                    
-                line = process.stdout.readline()
-                if not line:
+
+                if not selector.select(timeout=0.3):
+                    if process.poll() is not None:
+                        break
+                    continue
+
+                chunk = os.read(process.stdout.fileno(), 4096)
+                if not chunk:
                     break
-                    
-                self.append_terminal_line(line)
-                
-                # Dynamic terminal parser update
-                if "loading packages" in line.lower() or "downloading" in line.lower():
-                    self.update_status_idle("正在下載與快取軟體包...")
-                elif "checking keys" in line.lower() or "checking integrity" in line.lower():
-                    self.update_status_idle("正在檢查軟體包金鑰及完整性...")
-                elif "installing" in line.lower() or "upgrading" in line.lower():
-                    self.update_status_idle("正在複製檔案並配置系統...")
-                    
+
+                pending += chunk.decode('utf-8', errors='replace')
+                *lines, pending = pending.split('\n')
+                for line in lines:
+                    self._emit_output_line(line + '\n')
+        finally:
+            selector.close()
+
+        if pending:
+            self._emit_output_line(pending)
+
+        process.wait()
+        return True
+
+    def _emit_output_line(self, line):
+        self.append_terminal_line(line)
+
+        # Dynamic terminal parser update
+        lowered = line.lower()
+        if "loading packages" in lowered or "downloading" in lowered:
+            self.update_status_idle("正在下載與快取軟體包...")
+        elif "checking keys" in lowered or "checking integrity" in lowered:
+            self.update_status_idle("正在檢查軟體包金鑰及完整性...")
+        elif "installing" in lowered or "upgrading" in lowered:
+            self.update_status_idle("正在複製檔案並配置系統...")
+
+    def _terminate_process(self, process):
+        """Stop the child; escalate to SIGKILL if it ignores SIGTERM.
+
+        Note: pkexec/sudo run the real package manager as root, so a terminate on the
+        wrapper may not reap the privileged child.
+        """
+        process.terminate()
+        try:
+            process.wait(timeout=5)
+        except subprocess.TimeoutExpired:
+            logger.warning("Process %s ignored SIGTERM, sending SIGKILL", process.pid)
+            process.kill()
             process.wait()
-            return process.returncode == 0
-            
-        except Exception as e:
-            self.append_terminal_line(f"執行出錯: {e}\n")
-            return False
 
     def handle_argument(self, arg):
         if os.path.exists(arg):
@@ -1932,5 +2024,6 @@ class AppInstallerApp(Adw.Application):
         win.present()
 
 if __name__ == "__main__":
+    setup_logging()
     app = AppInstallerApp()
     sys.exit(app.run([]))
