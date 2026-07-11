@@ -469,15 +469,9 @@ def search_all(query, include_pacman=True, include_aur=True, include_flatpak=Tru
         return 10
 
     def source_priority(pkg):
-        src = pkg['source']
-        if src == 'Pacman':
-            return 0
-        elif src == 'npm':
-            return 1
-        elif src == 'Flatpak':
-            return 2
-        else:
-            return 3
+        # Pacman > AUR > npm > Flatpak: prefer the system package manager, then the
+        # community repo, then language-specific and sandboxed sources.
+        return {'Pacman': 0, 'AUR': 1, 'npm': 2, 'Flatpak': 3}.get(pkg['source'], 4)
 
     # Score once per package: match_score re-splits names with regex, and sort()
     # would otherwise call it on every comparison.
